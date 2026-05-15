@@ -8,6 +8,7 @@ crystal_construct::crystal_construct(){
 }
 
 crystal_construct::~crystal_construct(){
+
 }
 
 
@@ -17,11 +18,11 @@ void crystal_construct::DefineMaterials(){
 
     //Materials
     leadGlass = nist->FindOrBuildMaterial("G4_GLASS_LEAD");
-	worldMat = nist->FindOrBuildMaterial("G4_AIR");
-	covMat = nist->FindOrBuildMaterial("G4_Al");
-	pmtMat = nist->FindOrBuildMaterial("G4_Pyrex_Glass");
+	air = nist->FindOrBuildMaterial("G4_AIR");
+	Al = nist->FindOrBuildMaterial("G4_Al");
+	pyrex = nist->FindOrBuildMaterial("G4_Pyrex_Glass");
 
-	//properties of materials
+    //Properties
 	const G4int nentries = 32;
 
 	// photon energy matrix	
@@ -90,6 +91,7 @@ void crystal_construct::DefineMaterials(){
 		0.98, 0.98, 0.98, 0.98,
 		0.98, 0.98, 0.98, 0.98
 	};
+	
 	// Define reflectivity (Aluminum is defined as poorreflective, ~0%)
 	G4double reflectivityAl[nentries] = { 
 		0.0, 0.0, 0.0, 0.0,
@@ -102,9 +104,6 @@ void crystal_construct::DefineMaterials(){
 		0.0, 0.0, 0.0, 0.0
 	};
 
-	// Define diffuse reflection (Lambertian)
-    // 1.0 means maximum diffusion
-
     G4MaterialPropertiesTable *mptLG = new G4MaterialPropertiesTable();
 	mptLG->AddProperty("RINDEX", energy, rindexLG, nentries);
 	//mptLG->AddProperty("ABSLENGTH", energy, absorptionLength, nentries);
@@ -113,158 +112,121 @@ void crystal_construct::DefineMaterials(){
 
     G4MaterialPropertiesTable *mptWorld = new G4MaterialPropertiesTable();
 	mptWorld->AddProperty("RINDEX", energy, rindexWorld, nentries);
-	worldMat->SetMaterialPropertiesTable(mptWorld); 
+	air->SetMaterialPropertiesTable(mptWorld); 
 
 	G4MaterialPropertiesTable *mptPMT1 = new G4MaterialPropertiesTable();
 	mptPMT1->AddProperty("RINDEX", energy, rindexPMT, nentries);
 	//mptPMT1->AddProperty("ABSLENGTH", energy, absorptionLengthPMT, nentries);	
-	pmtMat->SetMaterialPropertiesTable(mptPMT1);
+	pyrex->SetMaterialPropertiesTable(mptPMT1);
 
 	
 	G4MaterialPropertiesTable *AluminumMPT = new G4MaterialPropertiesTable();
 	AluminumMPT->AddProperty("REFLECTIVITY", energy, reflectivityAl, nentries);
-	covMat->SetMaterialPropertiesTable(AluminumMPT);
+	Al->SetMaterialPropertiesTable(AluminumMPT);
 
 }
 
+//------------------------------------------------------
+void crystal_construct::ConstructGlass(){
+
+    //Fixed Values
+        G4double innerRad = 0.0*cm;
+	    G4double glass_outerRad = 25.0*cm; // 50 cm diameter
+	    G4double glass_h = 32.0*cm;
+	    G4double startAngle = 0.0*deg;
+	    G4double spanningAngle = 360.0*deg;
+        G4double inner_Al = 25.0*cm;
+        G4double outer_Al = 25.1*cm;
+        G4double Al_h = 32.1*cm;
+        G4double pmt_diam = 12.7*cm;
+        G4double pmt_h = 10.*cm; 
+        G4double pmt_ypos = 10.*cm;
+
+    //Solids
+        solidCrystal =  new G4Tubs("solidCrsytal", innerRad, glass_outerRad, 0.5*glass_h, startAngle, spanningAngle);
+   	    solidCover = new G4Tubs("solidCover", inner_Al, outer_Al, 0.5*Al_h, startAngle, spanningAngle);
+        solidPMT = new G4Tubs("solidPMT", innerRad, 0.5*pmt_diam, 0.5*pmt_h, startAngle, spanningAngle);
+        solidLid = new G4Tubs("solidLid", innerRad, inner_Al, 0.5*0.1*cm, startAngle, spanningAngle);
+        solidBottom = new G4Tubs("solidBottom", innerRad, inner_Al, 0.5*0.1*cm, startAngle, spanningAngle);
+        G4Tubs *reduct = new G4Tubs("reduct", innerRad, 0.5*pmt_diam,0.5*0.1*cm, startAngle, spanningAngle);
+
+    //Substract
+        G4ThreeVector yTrans(0.,pmt_ypos,0.);
+        G4ThreeVector yTrans_2(0.,-pmt_ypos,0.);
+        G4SubtractionSolid *solidBot_red = new G4SubtractionSolid("solidLid_red_2", solidBottom, reduct, 0, yTrans);
+        G4SubtractionSolid *solidBot_red_2 = new G4SubtractionSolid("solidLid_red", solidBot_red, reduct, 0, yTrans_2);
+        
+    //Logics
+        logicCrystal = new G4LogicalVolume(solidCrystal, leadGlass, "logicCrystal");
+        logicCover = new G4LogicalVolume(solidCover, Al, "logicCover");
+        logicPMT = new G4LogicalVolume(solidPMT, pyrex, "logicPMT");
+        logicLid = new G4LogicalVolume(solidLid, Al, "logicLid");
+        logicBottom = new G4LogicalVolume(solidBot_red_2, Al, "logicBottom");
+
+        fScoringVolume = logicCrystal;
+
+    //PhysVol
+        physCrystal = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.), logicCrystal, "physCrystal", logicWorld, false, 0, true);
+        physCover = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.), logicCover, "physCover", logicWorld, false, 0, true);
+        physLid = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.5*glass_h+0.5*0.1*cm), logicLid, "physLid", logicWorld, false, 0, true);
+        physPMT = new G4PVPlacement(0, G4ThreeVector(0.,pmt_ypos,-0.5*glass_h-0.5*pmt_h), logicPMT, "physPMT", logicWorld, false, 0, true);
+        physPMT = new G4PVPlacement(0, G4ThreeVector(0.,-1*pmt_ypos,-0.5*glass_h-0.5*pmt_h), logicPMT, "physPMT", logicWorld, false, 1, true);
+        physBottom = new G4PVPlacement(0, G4ThreeVector(0.,0.,-0.5*glass_h - 0.5*0.1*cm), logicBottom, "physBottom", logicWorld, false, 0, true); 
+
+    //Optical Tyvek
+        const G4int nentries = 32;
+        G4double sigmaAlpha = 1.0; 
+	    G4double energy[nentries] = {1.77*eV, 1.84*eV, 1.90*eV, 1.97*eV, 2.03*eV, 2.10*eV, 2.16*eV, 2.23*eV,2.29*eV, 2.36*eV, 2.42*eV, 2.49*eV, 2.55*eV, 2.62*eV, 2.68*eV, 2.75*eV, 2.81*eV, 2.88*eV, 2.94*eV, 3.01*eV, 3.07*eV, 3.14*eV, 3.20*eV, 3.27*eV, 3.33*eV, 3.40*eV, 3.46*eV, 3.53*eV, 3.59*eV, 3.66*eV, 3.72*eV, 4.13*eV};
+        G4double reflectivity[nentries] = {0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98, 0.98,0.98, 0.98, 0.98, 0.98,	0.98, 0.98, 0.98, 0.98};
+
+        G4MaterialPropertiesTable* tyvekMPT = new G4MaterialPropertiesTable();
+	    tyvekMPT->AddProperty("REFLECTIVITY", energy, reflectivity, nentries);
+
+	    G4OpticalSurface *tyvek = new G4OpticalSurface("TyvekSurface");
+	    tyvek->SetType(dielectric_dielectric);
+	    tyvek->SetModel(unified);             
+	    tyvek->SetFinish(groundfrontpainted); 
+	    tyvek->SetSigmaAlpha(sigmaAlpha); 
+	    tyvek->SetMaterialPropertiesTable(tyvekMPT);
+    
+    	G4LogicalBorderSurface *glass_al_surface = new G4LogicalBorderSurface("glass_al_surface", physCrystal, physCover,tyvek);
+    	G4LogicalBorderSurface *glass_lid_surface = new G4LogicalBorderSurface("glass_lid_surface", physCrystal, physLid,tyvek);
+    	G4LogicalBorderSurface *glass_bot_surface = new G4LogicalBorderSurface("glass_bot_surface", physCrystal, physBottom,tyvek);
+        
+    //Vis Attributes
+        G4VisAttributes *lgVisAtt = new G4VisAttributes(G4Color(0.12, 0.56, 1.0, 0.5));
+	    lgVisAtt->SetForceSolid(true);
+	    G4VisAttributes *pmtVisAtt = new G4VisAttributes(G4Color(0.3, 0.3, 0.3, 0.5));
+	    pmtVisAtt->SetForceSolid(true);
+	    G4VisAttributes *covVisAtt = new G4VisAttributes(G4Color(0.6, 0.6, 0.6, 0.5));
+	    covVisAtt->SetForceWireframe(true);
+
+	    logicCover->SetVisAttributes(covVisAtt);
+	    logicCrystal->SetVisAttributes(lgVisAtt);
+        logicPMT->SetVisAttributes(pmtVisAtt);
+
+
+}
+
+
+//-----------------------------------------------------------------------------
 G4VPhysicalVolume *crystal_construct::Construct(){
-
-    G4bool checkOverlaps = true;
-
-	// Lead glass geometry define	
-	G4double innerRadius = 0.0 * cm; // Solid lead glass cylinder
-	G4double outerRadius = 25.0 * cm; // 50 cm diameter
-	G4double halfHeight = 15.75 * cm; // ~32 cm total height
-	G4double startAngle = 0.0 * deg;
-	G4double spanningAngle = 360.0 * deg;
-
-	// Aluminum Cover geometry define	
-	G4double innerRadiusAl = 25.0 * cm; // Aluminum foil cylinder
-	G4double outerRadiusAl = 25.5 * cm; // 1 cm diameter
-	G4double halfHeightAl = 16.0 * cm; // ~32 cm total height
-	G4double startAngleAl = 0.0 * deg;
-	G4double spanningAngleAl = 360.0 * deg;
 	
-	// WORLD geometry define
+	//World
 	G4double xsize = 1.5 * m; 
 	G4double ysize = 1.5 * m; 
 	G4double zsize = 1.5 * m; 
-
-	// PMTs geometry define
-	G4double pmtinnerRadius = 0.0 * cm; 
-	G4double pmtouterRadius = 6.35 * cm; // 12.70 cm diameter
-	G4double pmthalfHeight = 5.0 * cm; // 5 cm total height
-	G4double pmtstartAngle = 0.0 * deg;
-	G4double pmtspanningAngle = 360.0 * deg;	
-
-	solidWorld = new G4Box("solidWorld", xsize, ysize, zsize);
-	G4LogicalVolume *logicWorld = new G4LogicalVolume(solidWorld, worldMat, "logicWorld");
-	physWorld = new G4PVPlacement(0, G4ThreeVector(0., 0. ,0.), logicWorld, "physWorld", 0, false, 0, checkOverlaps);
 	
-	CylinderCover = new G4Tubs("AluminumCov", innerRadiusAl, outerRadiusAl, halfHeightAl, startAngleAl, spanningAngleAl);
-	logicCover = new G4LogicalVolume(CylinderCover, covMat, "logicCover");
-    PhysCover = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.), logicCover, "physCover", logicWorld, false, 0, checkOverlaps);
+	solidWorld = new G4Box("solidWorld", xsize, ysize, zsize);
+	logicWorld = new G4LogicalVolume(solidWorld, air, "logicWorld");
+	physWorld = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.), logicWorld, "physWorld", 0, false, 0, true);
 
-	//===============================> Setting Visual Attributes
+    ConstructGlass();
 
-	G4VisAttributes *lgVisAtt = new G4VisAttributes(G4Color(0.12, 0.56, 1.0, 0.5));
-	lgVisAtt->SetForceSolid(true);
-	G4VisAttributes *pmtVisAtt = new G4VisAttributes(G4Color(0.3, 0.3, 0.3, 0.5));
-	pmtVisAtt->SetForceSolid(true);
-	G4VisAttributes *covVisAtt = new G4VisAttributes(G4Color(0.6, 0.6, 0.6, 0.5));
-	covVisAtt->SetForceSolid(true);
-	logicCover->SetVisAttributes(covVisAtt);
-
-	//===============================> Setting up Sensitive detectors
-
-	solidRadiator = new G4Tubs("LeadGlass", innerRadius, outerRadius, halfHeight, startAngle, spanningAngle);
-	logicRadiator = new G4LogicalVolume(solidRadiator, leadGlass, "logicRadiator");
-    PhysRadiator = new G4PVPlacement(0, G4ThreeVector(0.,0.,0.), logicRadiator, "physRadiator", logicWorld, false, 1.0, checkOverlaps);
-
-	logicRadiator->SetVisAttributes(lgVisAtt);
-
-	// Attach Optical Surface to the Cylinder
-// Create an Optical Surface
-
-//Properties
-	const G4int nentries = 32;
-    G4double sigmaAlpha = 1.0; 
-
-	// photon energy matrix	
-	G4double energy[nentries] = {
-		1.77*eV, 1.84*eV, 1.90*eV, 1.97*eV, 2.03*eV, 2.10*eV, 2.16*eV, 2.23*eV,
-		2.29*eV, 2.36*eV, 2.42*eV, 2.49*eV, 2.55*eV, 2.62*eV, 2.68*eV, 2.75*eV,
-		2.81*eV, 2.88*eV, 2.94*eV, 3.01*eV, 3.07*eV, 3.14*eV, 3.20*eV, 3.27*eV,
-		3.33*eV, 3.40*eV, 3.46*eV, 3.53*eV, 3.59*eV, 3.66*eV, 3.72*eV, 4.13*eV
-	};
-
-    G4double reflectivity[nentries] = { 
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98,
-		0.98, 0.98, 0.98, 0.98
-	};
-
-    G4MaterialPropertiesTable* tyvekMPT = new G4MaterialPropertiesTable();
-	tyvekMPT->AddProperty("REFLECTIVITY", energy, reflectivity, nentries);
-
-	G4OpticalSurface *tyvekSurface = new G4OpticalSurface("TyvekSurface");
-	tyvekSurface->SetType(dielectric_dielectric); // Tyvek interacts with light
-	tyvekSurface->SetModel(unified);              // Use the UNIFIED model
-	tyvekSurface->SetFinish(groundbackpainted);   // Diffuse reflection
-	tyvekSurface->SetSigmaAlpha(sigmaAlpha);      // Diffusion parameter
-	tyvekSurface->SetMaterialPropertiesTable(tyvekMPT);
-
-	G4LogicalBorderSurface *opSurf = new G4LogicalBorderSurface("TyvekOpticalSurface", PhysRadiator, physWorld, tyvekSurface);
-
-	solidDetector = new G4Tubs("solidDetector", pmtinnerRadius, pmtouterRadius, pmthalfHeight, pmtstartAngle, pmtspanningAngle);
-	logicDetector = new G4LogicalVolume(solidDetector, pmtMat, "logicalDetector");
-	physDetector = new G4PVPlacement(0, G4ThreeVector(0.,10.0*cm,20.75*cm), logicDetector, "physDetector", logicWorld, false, 2, checkOverlaps);
-
-	solidDetector1 = new G4Tubs("solidDetector1", pmtinnerRadius, pmtouterRadius, pmthalfHeight, pmtstartAngle, pmtspanningAngle);
-	logicDetector1 = new G4LogicalVolume(solidDetector1, pmtMat, "logicalDetector1");
-	physDetector1 = new G4PVPlacement(0, G4ThreeVector(0.,-10.0*cm,20.75*cm), logicDetector1, "physDetector1", logicWorld, false, 3, checkOverlaps);
-
-	logicDetector->SetVisAttributes(pmtVisAtt);
-	logicDetector1->SetVisAttributes(pmtVisAtt);
-
-    fScoringVolume = logicRadiator;
-
-	// Fotocathode surface
-
-	// QE realista R1512 (pico ~27%)
-	G4double efficiency[nentries] = {
-		0.02,0.05,0.10,0.18,0.24,0.27,0.26,0.25,
-		0.24,0.23,0.21,0.19,0.17,0.15,0.13,0.11,
-		0.09,0.07,0.06,0.05,0.04,0.03,0.02,0.015,
-		0.01,0.007,0.005,0.003,0.002,0.001,0.0,0.0
-	};
-
-	G4double PMTreflectivity[nentries];
-	for (int i = 0;i < nentries;i++) reflectivity[i] = 0.2; // Reflectivity of the photocathode (assumed)
-
-	auto photocathodeSurface = new G4OpticalSurface("PhotocathodeSurface");
-	photocathodeSurface->SetType(dielectric_metal);
-	photocathodeSurface->SetModel(unified);
-	photocathodeSurface->SetFinish(polished);
-
-	auto mptPC = new G4MaterialPropertiesTable();
-	//mptPC->AddProperty("EFFICIENCY", energy, efficiency, nentries);
-	mptPC->AddProperty("REFLECTIVITY", energy, PMTreflectivity, nentries);
-
-	photocathodeSurface->SetMaterialPropertiesTable(mptPC);
-
-	// Asociar a ambos PMTs
-	new G4LogicalBorderSurface("PC1", PhysRadiator, physDetector, photocathodeSurface);
-	new G4LogicalBorderSurface("PC2", PhysRadiator, physDetector1, photocathodeSurface);
-		
 	return physWorld;
 }
 
+//----------------------------------------------------------------------------------
 void crystal_construct::ConstructSDandField(){
 
     //Sensitive Detector:PMT
@@ -275,8 +237,7 @@ void crystal_construct::ConstructSDandField(){
     }
 
     G4SDManager::GetSDMpointer()->AddNewDetector(pmtSD.Get());
-    SetSensitiveDetector(logicDetector, pmtSD.Get());
-    SetSensitiveDetector(logicDetector1, pmtSD.Get());
+    SetSensitiveDetector(logicPMT, pmtSD.Get());
 
     if(lgSD.Get() == nullptr){
         constexpr auto LG_SENSITIVE_NAME = "lgSD";
@@ -285,5 +246,5 @@ void crystal_construct::ConstructSDandField(){
     }
 
     G4SDManager::GetSDMpointer()->AddNewDetector(lgSD.Get());
-    SetSensitiveDetector(logicRadiator, lgSD.Get());
+    SetSensitiveDetector(logicCrystal, lgSD.Get());
 }

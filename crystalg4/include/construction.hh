@@ -19,6 +19,7 @@
 #include "G4Color.hh"
 #include "G4SDManager.hh"
 #include "G4GenericMessenger.hh"
+#include "G4SubtractionSolid.hh"
 
 #include "pmt.hh"
 #include "lgdetector.hh"
@@ -34,20 +35,26 @@ class crystal_construct : public G4VUserDetectorConstruction{
 
 		virtual G4VPhysicalVolume *Construct();
         G4LogicalVolume *GetScoringVolume() const {return fScoringVolume;}
+        
+        void ConstructGlass();
 	
 	private:
         
         void DefineMaterials(); 
         virtual void ConstructSDandField();
 
-        G4Material *leadGlass, *worldMat, *covMat, *pmtMat;
+        G4Material *leadGlass, *air, *Al, *pyrex;
 
         G4Box *solidWorld;
-        G4Tubs *CylinderCover, *solidRadiator, *solidDetector, *solidDetector1;
-		G4LogicalVolume *logicRadiator, *logicDetector, *logicDetector1, *logicCover;
+        G4Tubs *solidCover, *solidCrystal, *solidPMT, *solidLid, *solidBottom;
+
+		G4LogicalVolume *logicWorld, *logicCrystal, *logicPMT, *logicCover, *logicLid, *logicBottom;
         G4LogicalVolume *fScoringVolume;
 
-        G4VPhysicalVolume *PhysCover, *physWorld, *PhysRadiator, *physDetector, *physDetector1;
+        G4VPhysicalVolume *physCover, *physWorld, *physCrystal, *physPMT, *physLid, *physBottom;
+
+        G4GenericMessenger *fMessenger;
+        G4bool pmt_top;
 
         G4Cache<pmt_sens*> pmtSD;
         G4Cache<crystal_sens*> lgSD;
