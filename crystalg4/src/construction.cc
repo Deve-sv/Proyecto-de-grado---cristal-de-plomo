@@ -2,18 +2,13 @@
 
 crystal_construct::crystal_construct(){
 
-    fMessenger = new G4GenericMessenger(this, "/detector/", "Detector Construction");
-    fMessenger->DeclareProperty("pmt_top", pmt_top, "PMT position");
-
-    pmt_top = false;
-
     DefineMaterials();
     pmtSD.Put(nullptr);
     lgSD.Put(nullptr);
 }
 
 crystal_construct::~crystal_construct(){
-    delete fMessenger;
+
 }
 
 
